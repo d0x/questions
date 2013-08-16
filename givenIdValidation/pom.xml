@@ -132,13 +132,6 @@
 			<!-- <scope>test</scope> -->
 		</dependency>
 
-		<!-- Joda Time -->
-		<dependency>
-			<groupId>joda-time</groupId>
-			<artifactId>joda-time</artifactId>
-			<version>${jodatime.version}</version>
-		</dependency>
-
 		<!-- Test dependencies -->
 		<dependency>
 			<groupId>org.hamcrest</groupId>
