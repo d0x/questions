@@ -107,21 +107,20 @@ public class Main extends PdfPageEventHelper
     {
         for (int i = 1; i < count + 1; i++)
         {
+            // append the chapter
             Chunk chunk = new Chunk("Chapter " + i, chapterFont).setLocalDestination("Chapter " + i);
             Chapter chapter = new Chapter(new Paragraph(chunk), i);
             chapter.setNumberDepth(0);
+            chapter.add(DUMMY_PARAGRAPH);
+            document.add(chapter);
 
+            // Set the placeholder.
             PdfTemplate template = tocPlaceholder.get(i);
-
             template.beginText();
             template.setFontAndSize(baseFont, 12);
-
             template.showText(String.valueOf(writer.getPageNumber()));
             template.endText();
 
-            chapter.add(DUMMY_PARAGRAPH);
-
-            document.add(chapter);
         }
     }
 
@@ -129,7 +128,7 @@ public class Main extends PdfPageEventHelper
     {
         totalPagesPlaceholder.beginText();
         totalPagesPlaceholder.setFontAndSize(baseFont, 8);
-        totalPagesPlaceholder.showText(String.valueOf(writer.getPageNumber()));
+        totalPagesPlaceholder.showText(String.valueOf(writer.getCurrentPageNumber()));
         totalPagesPlaceholder.endText();
 
         document.close();
