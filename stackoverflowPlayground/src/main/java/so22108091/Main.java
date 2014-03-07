@@ -17,120 +17,101 @@ import com.itextpdf.text.pdf.PdfContentByte;
 import com.itextpdf.text.pdf.PdfPageEventHelper;
 import com.itextpdf.text.pdf.PdfTemplate;
 import com.itextpdf.text.pdf.PdfWriter;
+import com.itextpdf.text.pdf.draw.VerticalPositionMark;
 
-/**
- * taken from: http://osdir.com/ml/java.lib.itext.general/2003-01/msg00002.html
- */
 public class Main extends PdfPageEventHelper
 {
-    private static final Paragraph          DUMMY_PARAGRAPH = new Paragraph("Lorem ipsum dolor sit amet.");
+    private final Document                 document;
+    private final PdfWriter                writer;
+    private final BaseFont                 baseFont       = BaseFont.createFont();
+    private final Font                     chapterFont    = FontFactory.getFont(FontFactory.HELVETICA, 24, Font.NORMAL);
 
-    private final Document                  document;
-    private final PdfContentByte            cb;
-    private final PdfWriter                 writer;
+    // table to store placeholder for all chapters and sections
+    private final Map<String, PdfTemplate> tocPlaceholder = new HashMap<>();
 
-    private final PdfTemplate               totalPagesPlaceholder;
+    // store the chapters and sections with their title here.
+    private final Map<String, Integer>     pageByTitle    = new HashMap<>();
 
-    // table to store templates for all chapters
-    private final Map<Integer, PdfTemplate> tocPlaceholder  = new HashMap<>();
-
-    // this is the BaseFont we are going to use for the header / footer
-    private final BaseFont                  baseFont        = BaseFont.createFont();
-    private final Font                      chapterFont     = FontFactory.getFont(FontFactory.HELVETICA, 24, Font.NORMAL);
-
-    // Holds current position. Updated at the end of each paragraph
-    private float                           currentY        = 0;
-
-    public static void main(String[] args) throws Exception
+    public static void main(final String[] args) throws Exception
     {
-        Main main = new Main();
+        final Main main = new Main();
 
         main.document.add(new Paragraph("This is an example to generate a TOC."));
-
-        main.createTOC(7);
-        main.createChapters(7);
-
-        main.finalzeDocument();
+        main.createTOC(10);
+        main.createChapters(10);
+        main.document.close();
     }
 
     public Main() throws Exception
     {
         this.document = new Document(PageSize.A6);
-        this.writer = PdfWriter.getInstance(document, new FileOutputStream("text.pdf"));
+        this.writer = PdfWriter.getInstance(this.document, new FileOutputStream("text.pdf"));
         this.writer.setPageEvent(this);
         this.document.open();
-        this.cb = writer.getDirectContent();
-        this.totalPagesPlaceholder = cb.createTemplate(50, 50);
-    }
-
-    /**
-     * Add "Page x of n" at the bottom of the page.
-     */
-    @Override
-    public void onEndPage(PdfWriter writer, Document document)
-    {
-        String text = "Page " + writer.getPageNumber() + " of ";
-        float len = baseFont.getWidthPoint(text, 8);
-        cb.beginText();
-        cb.setFontAndSize(baseFont, 8);
-        cb.setTextMatrix(140, 30);
-        cb.showText(text);
-        cb.endText();
-        cb.addTemplate(totalPagesPlaceholder, 140 + len, 30);
     }
 
     @Override
-    public void onParagraphEnd(PdfWriter writer, Document document, float position)
+    public void onChapter(final PdfWriter writer, final Document document, final float paragraphPosition, final Paragraph title)
     {
-        currentY = position;
+        this.pageByTitle.put(title.getContent(), writer.getPageNumber());
     }
 
-    private void createTOC(int count) throws DocumentException
+    @Override
+    public void onSection(final PdfWriter writer, final Document document, final float paragraphPosition, final int depth, final Paragraph title)
     {
-        Chapter title = new Chapter(new Paragraph("This is TOC ", chapterFont), 0);
-        title.setNumberDepth(0);
-        document.add(title);
+        this.pageByTitle.put(title.getContent(), writer.getPageNumber());
+    }
+
+    private void createTOC(final int count) throws DocumentException
+    {
+        // add a small introduction chapter the shouldn't be counted.
+        final Chapter intro = new Chapter(new Paragraph("This is TOC ", this.chapterFont), 0);
+        intro.setNumberDepth(0);
+        this.document.add(intro);
 
         for (int i = 1; i < count + 1; i++)
         {
-            String text = "Chapter " + i + " - page ";
-            Chunk chunk = new Chunk(text).setLocalGoto("Chapter " + i);
-            document.add(new Paragraph(chunk));
-            float len = baseFont.getWidthPoint(text, 12);
-            PdfTemplate template = cb.createTemplate(50, 50);
-            tocPlaceholder.put(i, template);
-            cb.addTemplate(template, 50 + len, currentY);
+            // Write "Chapter i"
+            final String title = "Chapter " + i;
+            final Chunk chunk = new Chunk(title).setLocalGoto(title);
+            this.document.add(new Paragraph(chunk));
+
+            // Add a placeholder for the page reference
+            this.document.add(new VerticalPositionMark() {
+                @Override
+                public void draw(final PdfContentByte canvas, final float llx, final float lly, final float urx, final float ury, final float y)
+                {
+                    final PdfTemplate createTemplate = canvas.createTemplate(50, 50);
+                    Main.this.tocPlaceholder.put(title, createTemplate);
+
+                    canvas.addTemplate(createTemplate, urx - 50, y);
+                }
+            });
         }
     }
 
-    private void createChapters(int count) throws DocumentException
+    private void createChapters(final int count) throws DocumentException
     {
         for (int i = 1; i < count + 1; i++)
         {
             // append the chapter
-            Chunk chunk = new Chunk("Chapter " + i, chapterFont).setLocalDestination("Chapter " + i);
-            Chapter chapter = new Chapter(new Paragraph(chunk), i);
+            final String title = "Chapter " + i;
+            final Chunk chunk = new Chunk(title, this.chapterFont).setLocalDestination(title);
+            final Chapter chapter = new Chapter(new Paragraph(chunk), i);
             chapter.setNumberDepth(0);
-            chapter.add(DUMMY_PARAGRAPH);
-            document.add(chapter);
 
-            // Set the placeholder.
-            PdfTemplate template = tocPlaceholder.get(i);
+            chapter.addSection("Foobar1");
+            chapter.addSection("Foobar2");
+            this.document.add(chapter);
+
+            // When we wrote the chapter, we now the pagenumber
+            final PdfTemplate template = this.tocPlaceholder.get(title);
             template.beginText();
-            template.setFontAndSize(baseFont, 12);
-            template.showText(String.valueOf(writer.getPageNumber()));
+            template.setFontAndSize(this.baseFont, 12);
+            template.setTextMatrix(50 - this.baseFont.getWidthPoint(String.valueOf(this.writer.getPageNumber()), 12), 0);
+            template.showText(String.valueOf(this.writer.getPageNumber()));
             template.endText();
 
         }
-    }
-
-    private void finalzeDocument()
-    {
-        totalPagesPlaceholder.beginText();
-        totalPagesPlaceholder.setFontAndSize(baseFont, 8);
-        totalPagesPlaceholder.showText(String.valueOf(writer.getCurrentPageNumber()));
-        totalPagesPlaceholder.endText();
-
-        document.close();
     }
 }
